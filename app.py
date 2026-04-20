@@ -123,16 +123,17 @@ def process():
                     raw_Frm = tokens.get('from', '')
                     if raw_Frm:
                         try:
-                            # Standardizing format for strptime
+                            # Standardize time format (ensure minutes, ensure space)
                             clean_Frm = raw_Frm.replace(".", ":").upper()
                             if ":" not in clean_Frm:
                                 clean_Frm = re.sub(r'(\d+)', r'\1:00', clean_Frm)
+                            clean_Frm = re.sub(r'(\d+)\s*(AM|PM)', r'\1 \2', clean_Frm)
                             time_obj = datetime.strptime(clean_Frm, "%I:%M %p")
                             time_val = time_obj.strftime("%-I:%M %p")
                             sort_val = time_obj.strftime("%H:%M")
                         except:
                             pass
-
+                            
                     delimit_addr = quick_addr(tokens)
                     view_string = tokens.get('viewing', '').lower()
 
