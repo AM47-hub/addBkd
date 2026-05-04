@@ -215,11 +215,24 @@ def process():
                     if not view_date:
                         encl_pat = "|".join(ENCLITICS)
                         mth_pat = "|".join(MTH_IDX.keys())
-                        mth_ID = re.search(rf'\b(\d+)(?:{encl_pat})?\s*(?:of\s*)?\b({mth_pat})[a-z]*\b', view_string, re.I)
-                        if mth_ID:
-                            v_day = int(mth_ID.group(1)) 
-                            v_mth = MTH_IDX[mth_ID.group(2).lower()]
+                        
+                        # Date Pattern A: "22nd of May"
+                        mth_ID_A = re.search(rf'\b(\d+)(?:{encl_pat})?\s*(?:of\s*)?\b({mth_pat})[a-z]*\b', view_string, re.I)
+                        
+                        # Date Pattern B: "May 22nd"
+                        mth_ID_B = re.search(rf'\b({mth_pat})[a-z]*\s*(\d+)(?:{encl_pat})?\b', view_string, re.I)
+            
+                        if mth_ID_A:
+                            v_day = int(mth_ID_A.group(1))
+                            v_mth = MTH_IDX[mth_ID_A.group(2).lower()]
                             v_yr = anchor_dt.year
+                        elif mth_ID_B:
+                            v_mth = MTH_IDX[mth_ID_B.group(1).lower()]
+                            v_day = int(mth_ID_B.group(2))
+                            v_yr = anchor_dt.year
+                
+                        # Apply the existing rollover logic if either match was found
+                        if mth_ID_A or mth_ID_B:
                             try:
                                 temp_date = datetime(v_yr, v_mth, v_day).date()
                                 # Rollover: If the parsed date is before the anchor, assume next year
