@@ -229,6 +229,37 @@ def process():
                             except ValueError:
                                 pass
 
+                    # Absolute Names
+                    if not view_date:
+                        encl_pat = "|".join(ENCLITICS)
+                        mth_pat = "|".join(MTH_IDX.keys())
+                        
+                        # Date Pattern A: "22nd of May"
+                        mth_ID_A = re.search(rf'\b(\d+)(?:{encl_pat})?\s*(?:of\s*)?\b({mth_pat})[a-z]*\b', view_string, re.I)
+                        
+                        # Date Pattern B: "May 22nd"
+                        mth_ID_B = re.search(rf'\b({mth_pat})[a-z]*\s*(\d+)(?:{encl_pat})?\b', view_string, re.I)
+            
+                        if mth_ID_A:
+                            v_day = int(mth_ID_A.group(1))
+                            v_mth = MTH_IDX[mth_ID_A.group(2).lower()]
+                            v_yr = anchor_dt.year
+                        elif mth_ID_B:
+                            v_mth = MTH_IDX[mth_ID_B.group(1).lower()]
+                            v_day = int(mth_ID_B.group(2))
+                            v_yr = anchor_dt.year
+                
+                        # Apply the existing rollover logic if either match was found
+                        if mth_ID_A or mth_ID_B:
+                            try:
+                                temp_date = datetime(v_yr, v_mth, v_day).date()
+                                # Rollover: If the parsed date is before the anchor, assume next year
+                                if temp_date < anchor_dt:
+                                    temp_date = datetime(v_yr + 1, v_mth, v_day).date()
+                                view_date = temp_date
+                            except ValueError:
+                                pass
+                    
                     # Relative Logic
                     if not view_date:
                         if "tomorrow" in view_string:
