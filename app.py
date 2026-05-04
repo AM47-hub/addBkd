@@ -140,13 +140,17 @@ def process():
 
                     if raw_Frm:
                         try:
-                            # Basic Cleanup
+                            # Basic Cleanup - ensure uppercase, colon and trim
                             clean_Frm = raw_Frm.replace(".", ":").upper().strip()
                             
                             # Fix missing colons, add :00 if missing
-                            clean_Frm = re.sub(r'\b(\d{1,2})(?!:)\b', r'\1:00', clean_Frm)
+                            clean_Frm = re.sub(r'(\d{1,2})\s+(\d{2})', r'\1:\2', clean_Frm)
+
+                            # Fix Naked Hours (e.g., "5" or "5PM")
+                            if ":" not in clean_Frm:
+                                clean_Frm = re.sub(r'(\d{1,2})', r'\1:00', clean_Frm, count=1)
                             
-                            # Apply AM/PM  if missing (the "8:00am Rule")
+                            # Apply AM/PM if missing (The "8:00am Rule")
                             if "AM" not in clean_Frm and "PM" not in clean_Frm:
                                 # Extract hour
                                 hr_match = re.search(r'(\d{1,2}):', clean_Frm)
