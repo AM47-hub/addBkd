@@ -5,47 +5,60 @@ from datetime import datetime, timedelta
 import os
 
 # --- GLOBAL CONSTANT BLOCK ---
-# Global repairs dictionary
-REPAIRS = {
+# Digitize Natural Language
+CARDINALS = {
     'one': '1', 'won': '1', 'two': '2', 'to': '2',
     'three': '3', 'four': '4', 'for': '4',
     'five': '5', 'six': '6',
     'seven': '7', 'eight': '8', 'ate': '8',
-    'nine': '9', 'zero': '0', 'none':'0', 'nill':'0',
+    'nine': '9', 'ten': '10', 'zero': '0', 'none':'0', 'nill':'0',
     'eleven': '11', 'twelve': '12', 'thirteen': '13', 'fourteen': '14',
     'fifteen': '15', 'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19',
-    'twenty': '20', 'thirty': '30', 'fourty':'40', 'fifty':'50',
+    'twenty': '20', 'thirty': '30', 'forty':'40', 'fifty':'50',
     'dash': '-', '–': '-', '—': '-'
 }
 
+ORDINALS = {
+    "first": 1,"second": 2,"third": 3,"fourth": 4,"fifth": 5,
+    "sixth": 6,"seventh": 7,"eighth": 8,"ninth": 9,"tenth": 10,
+    "eleventh": 11,"twelveth": 12,"thirteenth": 13,"fourteenth": 14,"fifteenth": 15,
+    "sixteenth": 16,"seventeenth": 17,"eighteenth": 18,"ninteenth": 19,
+    "twentieth": 20, "thirtieth": 30, "fortieth": 40, "fiftieth": 50
+}
+
+ENCLITICS = {"st","nd","rd","th"}
+
+ENCLITIC_MAP = {
+     1: "st", 2: "nd", 3: "rd", 4: "th", 5: "th",
+     6: "th", 7: "th", 8: "th", 9: "th", 10: "th",
+}
+
+# Address abbreviations
 SUFFIX = {
     'Road': 'Rd.', 'Street': 'St.', 'Crescent': 'Cres.', 
     'Place': 'Pl.', 'Avenue': 'Ave.', 'Lane': 'Ln.', 
     'Highway': 'Hwy.', 'Way': 'Wy.','Row': 'Rw.', 'Terrace': 'Tce.', 'Drive': 'Dr.'
 }
 
-# Digitize Natural Language
-
-ENCLITICS = {"st","nd","rd","th"}
-
-ORDINALS = {
-    "first": 1,"second": 2,"third": 3,"fourth": 4,"fifth": 5,
-    "sixth": 6,"seventh": 7,"eighth": 8,"ninth": 9,"tenth": 10
-}
-
 DAY_IDX = {
-      'mon': 0, 'monday': 0,
-      'tue': 1, 'tuesday': 1,
-      'wed': 2, 'wednesday': 2,
-      'thu': 3, 'thursday': 3,
-       'fri': 4, 'friday': 4,
-       'sat': 5, 'saturday': 5,
-       'sun': 6, 'sunday': 6
+    'mon': 0, 'monday': 0,
+    'tue': 1, 'tuesday': 1,
+    'wed': 2, 'wednesday': 2,
+    'thu': 3, 'thursday': 3,
+    'fri': 4, 'friday': 4,
+    'sat': 5, 'saturday': 5,
+    'sun': 6, 'sunday': 6
 }
 
 MTH_IDX = {
     "jan": 1,"feb": 2,"mar": 3,"apr": 4,"may": 5,"jun": 6,
     "jul": 7,"aug": 8,"sep": 9,"oct": 10,"nov": 11,"dec": 12
+}
+
+KEYWORDS = {
+    "flat", "number", "beside", "suburb", "type", "rent", "rooms", 
+    "available", "viewing", "from", "until", "agency", 
+    "person", "mobile", "comments"
 }
 
 app = Flask(__name__)
@@ -54,17 +67,11 @@ app = Flask(__name__)
 def wakeup():
     return make_response("Ready", 200)
 
-def fast_parse(dictated):
-    keywords = [
-        "flat", "number", "beside", "suburb", "type", "rent", "rooms", 
-        "available", "viewing", "from", "until", "agency", 
-        "person", "mobile", "comments"
-    ]
-
-    delimit = re.compile(r'\b(' + '|'.join(keywords) + r')\b', re.I)
+def initial_parse(dictated):
+    delimit = re.compile(r'\b(' + '|'.join(KEYWORDS) + r')\b', re.I)
     chunks = list(delimit.finditer(dictated))
 
-    raw_vals = {k: "" for k in keywords}
+    raw_vals = {k: "" for k in KEYWORDS}
     for i in range(len(chunks)):
         start = chunks[i].end()
         if i + 1 < len(chunks):
@@ -74,10 +81,9 @@ def fast_parse(dictated):
         raw_vals[chunks[i].group(1).lower()] = dictated[start:end].strip()
     return raw_vals
 
-def quick_addr(tokens):
+def repair_addr(tokens):
     unit = tokens.get('flat', '').replace(" ", "").upper()
     numb = tokens.get('number', '').replace(" ", "").upper()
-    
     if unit:
         # If 'flat' starts with number, add the "U"
         if unit[0].isdigit():
@@ -106,12 +112,13 @@ def process():
         if not raw: 
             return make_response(json.dumps([]), 200)
 
+        notes = [s.strip() for s in raw.split('|') if 'Content:' in s]
+
         # Initialize results as an empty objects
         bkd_groups = {}
         fnd_groups = {}
         results = []
 
-        notes = [s.strip() for s in raw.split('|') if 'Content:' in s]
         for text in notes:
             try:
                 key_values = text.split('Content:', 1)
@@ -127,21 +134,56 @@ def process():
 
                 if raw_list and raw_status and raw_anchor:
                     source = raw_list.group(1)
-                    
                     status = raw_status.group(1)
-                    status_dt = datetime.strptime(status, '%Y-%m-%d').date()
-
                     anchor = raw_anchor.group(1)
                     anch_clean = anchor.split('T')[0]
+                    status_dt = datetime.strptime(status, '%Y-%m-%d').date()
                     anchor_dt = datetime.strptime(anch_clean, '%Y-%m-%d').date()
+                    tokens = initial_parse(body)
 
-                    tokens = fast_parse(body)
-
-                    # Apply REPAIRS logic
+                    # Global Cardinal Repairs
                     for key in tokens:
                         val = tokens[key]
-                        for word, digit in REPAIRS.items():
+                        for word, digit in CARDINALS.items():
                             val = re.sub(rf'\b{word}\b', digit, val, flags=re.I)
+                        tokens[key] = val
+
+                    # Targeted Ordinal Repair (Date Fields only)
+                    for key in ['available', 'viewing']:
+                        val = tokens.get(key, '')
+                        if not val: continue
+                        
+                        # Remove hyphens, "the", and "of"
+                        val = val.replace('-', ' ')
+                        val = re.sub(rf'\b(the|of)\b', '', val, flags=re.I)
+                        val = re.sub(r'\s+', ' ', val).strip()
+
+                        # Identify hybrid string (e.g., "20 third")
+                        isHybrid = rf"\b(20|30)\s+({'|'.join(ORDINALS.keys())})\b"
+                        def convert_Hybrid(match):
+                            tens_val = int(match.group(1))
+                            units_Ordinal = match.group(2).lower()
+                            # Convert units_part to integer if Ordinal
+                            units_val = int(ORDINALS.get(units_Ordinal, 0))
+                            total = tens_val + units_val
+                            # Attach enclitic
+                            if 11 <= (total % 100) <= 13:
+                                suffix = "th"
+                            else:
+                                suffix = ENCLITIC_MAP.get(total % 10, "th")
+                            return f"{total}{suffix}"
+
+                        val = re.sub(isHybrid, convert_Hybrid, val, flags=re.I)
+
+                        # If not, simple Ordinal conversion (e.g., "sixth")
+                        for word, digit in ORDINALS.items():
+                        # Convert to int for the suffix check, or use a map
+                        d_int = int(digit)
+                        if 11 <= (d_int % 100) <= 13:
+                            suffix = "th"
+                        else:
+                            suffix =ENCLITIC_MAP.get(d_int % 10, "th")
+                        val = re.sub(rf'\b{word}\b', f"{d_int}{suffix}", val, flags=re.I)
                         tokens[key] = val
 
                     # TIME PARSING (After repairs)
@@ -181,7 +223,7 @@ def process():
                             # Fallback to TBA on parse failure
                             pass
 
-                    delimit_addr = quick_addr(tokens)
+                    delimit_addr = repair_addr(tokens)
                     view_string = tokens.get('viewing', '').lower()
                     view_date = None
 
@@ -242,37 +284,6 @@ def process():
                             except ValueError:
                                 pass
 
-                    # Absolute Names
-                    if not view_date:
-                        encl_pat = "|".join(ENCLITICS)
-                        mth_pat = "|".join(MTH_IDX.keys())
-                        
-                        # Date Pattern A: "22nd of May"
-                        mth_ID_A = re.search(rf'\b(\d+)(?:{encl_pat})?\s*(?:of\s*)?\b({mth_pat})[a-z]*\b', view_string, re.I)
-                        
-                        # Date Pattern B: "May 22nd"
-                        mth_ID_B = re.search(rf'\b({mth_pat})[a-z]*\s*(\d+)(?:{encl_pat})?\b', view_string, re.I)
-            
-                        if mth_ID_A:
-                            v_day = int(mth_ID_A.group(1))
-                            v_mth = MTH_IDX[mth_ID_A.group(2).lower()]
-                            v_yr = anchor_dt.year
-                        elif mth_ID_B:
-                            v_mth = MTH_IDX[mth_ID_B.group(1).lower()]
-                            v_day = int(mth_ID_B.group(2))
-                            v_yr = anchor_dt.year
-                
-                        # Apply the existing rollover logic if either match was found
-                        if mth_ID_A or mth_ID_B:
-                            try:
-                                temp_date = datetime(v_yr, v_mth, v_day).date()
-                                # Rollover: If the parsed date is before the anchor, assume next year
-                                if temp_date < anchor_dt:
-                                    temp_date = datetime(v_yr + 1, v_mth, v_day).date()
-                                view_date = temp_date
-                            except ValueError:
-                                pass
-                    
                     # Relative Logic
                     if not view_date:
                         if "tomorrow" in view_string:
@@ -292,14 +303,12 @@ def process():
                                     view_date += timedelta(days=7)
 
                     # Day Flag assigned
-
                     if view_date and view_date == status_dt:
                         day_flag = "TODAY"
                     else:
                         day_flag = "UNKNOWN"
 
                     appoint = "must book" in view_string
-
 
                     # SOURCE ROUTING (Now both have vflag and Time data)
                     if "2Booked" in source:
@@ -337,8 +346,8 @@ def process():
 
             if addr_key in fnd_groups:
                 fnd_list = fnd_groups[addr_key]
+                match_flag = []
                 if len(fnd_list) > 1:
-                    match_flag = []
                     for fflag in fnd_list:
                         if fflag['TBC']:
                             match_flag.append(fflag)
@@ -375,7 +384,6 @@ def process():
         results.sort(key=lambda x: x["SortTime"])
 
         return make_response(json.dumps(results), 200, {"Content-Type": "application/json"})
-
     except Exception as e:
         return make_response(json.dumps([{"fatal_crash": str(e)}]), 200)
 
