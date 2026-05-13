@@ -179,12 +179,13 @@ def process():
 
                         # If not, simple Ordinal conversion (e.g., "sixth")
                         for word, digit in ORDINALS.items():
-                        # Convert to int for the suffix check, or use a map
-                        d_int = int(digit)
-                        if 11 <= (d_int % 100) <= 13:
-                            suffix = "th"
-                        else:
-                            suffix =ENCLITIC_MAP.get(d_int % 10, "th")
+                            # Convert to int for the suffix check, or use a map
+                            d_int = int(digit)
+                            if 11 <= (d_int % 100) <= 13:
+                                suffix = "th"
+                            else:
+                                suffix =ENCLITIC_MAP.get(d_int % 10, "th")
+                        
                         val = re.sub(rf'\b{word}\b', f"{d_int}{suffix}", val, flags=re.I)
                         tokens[key] = val
 
