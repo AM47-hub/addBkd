@@ -15,7 +15,9 @@ CARDINALS = {
     'eleven': '11', 'twelve': '12', 'thirteen': '13', 'fourteen': '14',
     'fifteen': '15', 'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19',
     'twenty': '20', 'thirty': '30', 'forty':'40', 'fifty':'50',
-    'dash': '-', '–': '-', '—': '-'
+    '\u002d': '-', '\u2010': '-', '\u2011': '-', '\u2012': '-',
+    '\u2013': '-', '\u2014': '-', '\u2212': '-',
+    'dash': '-', '–': '-', '—': '-', 'hyphen': '-'
 }
 
 ORDINALS = {
