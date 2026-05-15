@@ -3,7 +3,6 @@ import re
 import json
 from datetime import datetime, timedelta
 import os
-
 # --- GLOBAL CONSTANT BLOCK ---
 # Digitize Natural Language
 CARDINALS = {
@@ -19,29 +18,23 @@ CARDINALS = {
     '\u2013': '-', '\u2014': '-', '\u2212': '-',
     'dash': '-', '–': '-', '—': '-', 'hyphen': '-'
 }
-
 ORDINALS = {
     "first": 1,"second": 2,"third": 3,"fourth": 4,"fifth": 5,
     "sixth": 6,"seventh": 7,"eighth": 8,"ninth": 9,"tenth": 10,
-    "eleventh": 11,"twelveth": 12,"thirteenth": 13,"fourteenth": 14,"fifteenth": 15,
+    "eleventh": 11,"twelfth": 12,"thirteenth": 13,"fourteenth": 14,"fifteenth": 15,
     "sixteenth": 16,"seventeenth": 17,"eighteenth": 18,"ninteenth": 19,
     "twentieth": 20, "thirtieth": 30, "fortieth": 40, "fiftieth": 50
 }
-
 ENCLITICS = {"st","nd","rd","th"}
-
 ENCLITIC_MAP = {
-     1: "st", 2: "nd", 3: "rd", 4: "th", 5: "th",
-     6: "th", 7: "th", 8: "th", 9: "th", 10: "th",
+     1: "st", 2: "nd", 3: "rd"
 }
-
 # Address abbreviations
 SUFFIX = {
     'Road': 'Rd.', 'Street': 'St.', 'Crescent': 'Cres.', 
     'Place': 'Pl.', 'Avenue': 'Ave.', 'Lane': 'Ln.', 
     'Highway': 'Hwy.', 'Way': 'Wy.','Row': 'Rw.', 'Terrace': 'Tce.', 'Drive': 'Dr.'
 }
-
 DAY_IDX = {
     'mon': 0, 'monday': 0,
     'tue': 1, 'tuesday': 1,
@@ -51,28 +44,22 @@ DAY_IDX = {
     'sat': 5, 'saturday': 5,
     'sun': 6, 'sunday': 6
 }
-
 MTH_IDX = {
     "jan": 1,"feb": 2,"mar": 3,"apr": 4,"may": 5,"jun": 6,
     "jul": 7,"aug": 8,"sep": 9,"oct": 10,"nov": 11,"dec": 12
 }
-
 KEYWORDS = {
     "flat", "number", "beside", "suburb", "type", "rent", "rooms", 
     "available", "viewing", "from", "until", "agency", 
     "person", "mobile", "comments"
 }
-
 app = Flask(__name__)
-
 @app.route('/ping', methods=['GET', 'HEAD'])
 def wakeup():
     return make_response("Ready", 200)
-
 def initial_parse(dictated):
     delimit = re.compile(r'\b(' + '|'.join(KEYWORDS) + r')\b', re.I)
     chunks = list(delimit.finditer(dictated))
-
     raw_vals = {k: "" for k in KEYWORDS}
     for i in range(len(chunks)):
         start = chunks[i].end()
@@ -82,7 +69,6 @@ def initial_parse(dictated):
             end = len(dictated)
         raw_vals[chunks[i].group(1).lower()] = dictated[start:end].strip()
     return raw_vals
-
 def repair_addr(tokens):
     unit = tokens.get('flat', '').replace(" ", "").upper()
     numb = tokens.get('number', '').replace(" ", "").upper()
@@ -94,46 +80,39 @@ def repair_addr(tokens):
             location = f"{unit}/{numb}"
     else:
         location = numb
-
     # Standardize 'beside' tokens
     beside = re.sub(r'^the\s+kingsway', 'Kingsway', tokens.get('beside', ''), flags=re.I)
+    
     full_addr = f"{location} {beside} {tokens.get('suburb', '')}"
     full_addr = re.sub(r'\s+', ' ', full_addr).strip().title()
-
     # Apply suffixes using word boundaries to prevent "Broadway" -> "BRd.way"
     for full_word, abbrev in SUFFIX.items():
         full_addr = re.sub(rf'\b{full_word}\b', abbrev, full_addr, flags=re.I)
     return full_addr
-
 @app.route('/process', methods=['POST'])
 def process():
     try:
         PassOut = request.get_json(force=True)
         payload = PassOut.get('dictated', '')
         raw = str(payload).replace('\xa0', ' ').strip()
+        
         if not raw: 
             return make_response(json.dumps([]), 200)
-
         notes = [s.strip() for s in raw.split('|') if 'Content:' in s]
-
         # Initialize results as an empty objects
         bkd_groups = {}
         fnd_groups = {}
         results = []
-
         for text in notes:
             try:
                 key_values = text.split('Content:', 1)
                 if len(key_values) < 2:
                     continue
-
                 meta = key_values[0]
                 body = key_values[1]
-
                 raw_list = re.search(r'Source:\s*(\S+)', meta, re.I)
                 raw_status = re.search(r'Status:\s*(\d{4}-\d{2}-\d{2})', meta, re.I)
                 raw_anchor = re.search(r'Anchor:\s*([\d\-T:+]+)', meta, re.I)
-
                 if raw_list and raw_status and raw_anchor:
                     source = raw_list.group(1)
                     status = raw_status.group(1)
@@ -142,14 +121,12 @@ def process():
                     status_dt = datetime.strptime(status, '%Y-%m-%d').date()
                     anchor_dt = datetime.strptime(anch_clean, '%Y-%m-%d').date()
                     tokens = initial_parse(body)
-
                     # Global Cardinal Repairs
                     for key in tokens:
                         val = tokens[key]
                         for word, digit in CARDINALS.items():
                             val = re.sub(rf'\b{word}\b', digit, val, flags=re.I)
                         tokens[key] = val
-
                     # Targeted Ordinal Repair (Date Fields only)
                     for key in ['available', 'viewing']:
                         val = tokens.get(key, '')
@@ -159,7 +136,6 @@ def process():
                         val = val.replace('-', ' ')
                         val = re.sub(rf'\b(the|of)\b', '', val, flags=re.I)
                         val = re.sub(r'\s+', ' ', val).strip()
-
                         # Identify hybrid string (e.g., "20 third")
                         isHybrid = rf"\b(20|30)\s+({'|'.join(ORDINALS.keys())})\b"
                         def convert_Hybrid(match):
@@ -174,9 +150,7 @@ def process():
                             else:
                                 suffix = ENCLITIC_MAP.get(total % 10, "th")
                             return f"{total}{suffix}"
-
                         val = re.sub(isHybrid, convert_Hybrid, val, flags=re.I)
-
                         # If not, simple Ordinal conversion (e.g., "sixth")
                         for word, digit in ORDINALS.items():
                             # Convert to int for the suffix check, or use a map
@@ -185,15 +159,13 @@ def process():
                                 suffix = "th"
                             else:
                                 suffix =ENCLITIC_MAP.get(d_int % 10, "th")
+                            val = re.sub(rf'\b{word}\b', f"{d_int}{suffix}", val, flags=re.I)
                         
-                        val = re.sub(rf'\b{word}\b', f"{d_int}{suffix}", val, flags=re.I)
                         tokens[key] = val
-
                     # TIME PARSING (After repairs)
                     time_val = "TBA"
                     sort_val = "23:59"
                     raw_Frm = tokens.get('from', '')
-
                     if raw_Frm:
                         try:
                             # Basic Cleanup - ensure uppercase, colon and trim
@@ -201,7 +173,6 @@ def process():
                             
                             # Fix missing colons, add :00 if missing
                             clean_Frm = re.sub(r'(\d{1,2})\s+(\d{2})', r'\1:\2', clean_Frm)
-
                             # Fix Naked Hours (e.g., "5" or "5PM")
                             if ":" not in clean_Frm:
                                 clean_Frm = re.sub(r'(\d{1,2})', r'\1:00', clean_Frm, count=1)
@@ -214,7 +185,6 @@ def process():
                                     hr_val = int(hr_match.group(1))
                                     # Assign AM/PM
                                     clean_Frm += " AM" if hr_val > 8 else " PM"
-
                             # Ensure space before AM/PM
                             clean_Frm = re.sub(r'(\d{1,2}:\d{2})\s*(AM|PM)', r'\1 \2', clean_Frm)
                             
@@ -225,11 +195,9 @@ def process():
                         except Exception:
                             # Fallback to TBA on parse failure
                             pass
-
                     delimit_addr = repair_addr(tokens)
                     view_string = tokens.get('viewing', '').lower()
                     view_date = None
-
                     # --- DATE LOGIC ---
                     # Direct Numeric (Robust Version with Rollover)
                     date_actual = re.search(r'(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?', view_string)
@@ -255,7 +223,6 @@ def process():
                                 view_date = temp_date
                             except ValueError:
                                 pass
-
                     # Absolute Names
                     if not view_date:
                         encl_pat = "|".join(ENCLITICS)
@@ -286,7 +253,6 @@ def process():
                                 view_date = temp_date
                             except ValueError:
                                 pass
-
                     # Relative Logic
                     if not view_date:
                         if "tomorrow" in view_string:
@@ -304,15 +270,12 @@ def process():
                                 view_date = anchor_dt + timedelta(days=days_ahead)
                                 if pref == 'next' and anchor_dt.weekday() < target_weekday:
                                     view_date += timedelta(days=7)
-
                     # Day Flag assigned
                     if view_date and view_date == status_dt:
                         day_flag = "TODAY"
                     else:
-                        day_flag = "UNKNOWN"
-
-                    appoint = "must book" in view_string
-
+                        day_flag = "EXCLUDE"
+                    # Ignore: appoint = "must book" in view_string
                     # SOURCE ROUTING (Now both have vflag and Time data)
                     if "2Booked" in source:
                         bkd_fields = {
@@ -328,7 +291,7 @@ def process():
                             "rent": tokens.get('rent', ''), 
                             "agency": tokens.get('agency', ''), 
                             "mobile": tokens.get('mobile', ''), 
-                            "TBC": appoint,
+                            # Ignore: "TBC": appoint,
                             "vflag": day_flag,
                             "From": time_val,
                             "SortTime": sort_val
@@ -338,22 +301,19 @@ def process():
                         fnd_groups[delimit_addr].append(fnd_fields)
             except:
                 continue
-
         # First Pass: Match with Found if possible
         for addr_key in bkd_groups:
             match_flag = []
             bkd_list = bkd_groups[addr_key]
-
             # Any matching 'Found' entry for this address
             fnd_val = None
-
             if addr_key in fnd_groups:
                 fnd_list = fnd_groups[addr_key]
                 match_flag = []
                 if len(fnd_list) > 1:
-                    for fflag in fnd_list:
-                        if fflag['TBC']:
-                            match_flag.append(fflag)
+                    for f_note in fnd_list:
+                        if f_note['vflag']:
+                            match_flag.append(f_note)
                 else:
                     match_flag = fnd_list
                 if match_flag:
@@ -368,7 +328,6 @@ def process():
                         "Mobile": fnd_val.get("mobile", "not found?") if fnd_val else "not found?",
                         "SortTime": bkd_val["SortTime"]
                     })
-
         # Second Pass: 'Found' notes for TODAY
         addr_Fnd = [res["Address"] for res in results]
         for addr_key, fnd_list in fnd_groups.items():
@@ -383,12 +342,9 @@ def process():
                             "Mobile": fnd_val.get("mobile", ""),
                             "SortTime": fnd_val["SortTime"]
                         })
-
         results.sort(key=lambda x: x["SortTime"])
-
         return make_response(json.dumps(results), 200, {"Content-Type": "application/json"})
     except Exception as e:
         return make_response(json.dumps([{"fatal_crash": str(e)}]), 200)
-
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
